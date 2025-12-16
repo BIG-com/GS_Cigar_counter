@@ -7,9 +7,15 @@ import '../widgets/quantity_input.dart';
 import '../services/barcode_service.dart';
 import 'summary_screen.dart';
 import 'barcode_scanner_screen.dart';
+import 'mode_selection_screen.dart';
 
 class EntryScreen extends StatefulWidget {
-  const EntryScreen({super.key});
+  final InputMode inputMode;
+
+  const EntryScreen({
+    super.key,
+    required this.inputMode,
+  });
 
   @override
   State<EntryScreen> createState() => _EntryScreenState();
@@ -17,6 +23,7 @@ class EntryScreen extends StatefulWidget {
 
 class _EntryScreenState extends State<EntryScreen> {
   String? _lastCheckedBarcode;
+  Function()? _boruConfirmCallback;
 
   @override
   Widget build(BuildContext context) {
@@ -240,14 +247,144 @@ class _EntryScreenState extends State<EntryScreen> {
     return Container(
       padding: const EdgeInsets.all(16.0),
       child: QuantityInput(
+        inputMode: widget.inputMode,
         onQuantitySelected: (quantity) {
           inventoryModel.setQuantityForCurrent(quantity);
+        },
+        onBoruConfirmReady: (callback) {
+          _boruConfirmCallback = callback;
         },
       ),
     );
   }
 
   Widget _buildNavigationButtons(InventoryModel inventoryModel) {
+    // 보루 모드: 하단 버튼 레이아웃 변경 (< : > : 확인 = 2:2:6)
+    if (widget.inputMode == InputMode.boru) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            // 이전 버튼 - flex 2
+            Expanded(
+              flex: 2,
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: inventoryModel.currentIndex > 0
+                      ? Colors.white
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: inventoryModel.currentIndex > 0 ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ] : null,
+                ),
+                child: TextButton(
+                  onPressed: inventoryModel.currentIndex > 0
+                      ? () => inventoryModel.goToPrevious()
+                      : null,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.chevron_left,
+                    color: inventoryModel.currentIndex > 0
+                        ? Colors.black
+                        : Colors.grey[400],
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // 다음 버튼 - flex 2
+            Expanded(
+              flex: 2,
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextButton(
+                  onPressed: () => inventoryModel.setQuantityForCurrent(0),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.black,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // 확인 버튼 - flex 6
+            Expanded(
+              flex: 6,
+              child: Container(
+                height: 50,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF34C759), // iOS 시스템 그린
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF34C759).withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: TextButton(
+                  onPressed: () {
+                    // QuantityInput으로부터 입력 버퍼 값을 가져와서 처리
+                    _handleBoruConfirm(inventoryModel);
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    '확인',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 일반 모드: 기존 레이아웃 유지
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
@@ -379,6 +516,11 @@ class _EntryScreenState extends State<EntryScreen> {
         ],
       ),
     );
+  }
+
+  void _handleBoruConfirm(InventoryModel inventoryModel) {
+    // QuantityInput의 confirmBoruInput 메서드를 콜백으로 호출
+    _boruConfirmCallback?.call();
   }
 
   void _showQuantityConfirmation(int quantity) {

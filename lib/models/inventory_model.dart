@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart';
 import '../models/product_entry.dart';
 import '../services/local_storage_service.dart';
+import '../screens/mode_selection_screen.dart';
 
 class InventoryModel extends ChangeNotifier {
   final List<ProductEntry> _entries = [];
@@ -13,6 +14,7 @@ class InventoryModel extends ChangeNotifier {
   String? _errorMessage;
   double _summaryScrollPosition = 0.0; // SummaryScreen ListView 스크롤 위치 저장
   final Set<int> _selectedSummaryItems = {}; // SummaryScreen에서 선택된 아이템들의 인덱스
+  InputMode? _inputMode; // 선택된 입력 모드 저장
 
   // Getters
   List<ProductEntry> get entries => List.unmodifiable(_entries);
@@ -22,6 +24,7 @@ class InventoryModel extends ChangeNotifier {
   bool get isFinished => _currentIndex >= _entries.length;
   ProductEntry? get currentEntry =>
       isFinished ? null : _entries[_currentIndex];
+  InputMode? get inputMode => _inputMode;
 
   // 완료된 항목들만 반환
   List<ProductEntry> get recordedEntries =>
@@ -155,7 +158,7 @@ class InventoryModel extends ChangeNotifier {
 
   /// 현재 항목에 수량 설정 후 다음 항목으로 이동
   void setQuantityForCurrent(int quantity) {
-    if (isFinished || quantity < 0 || quantity > 9) return;
+    if (isFinished || quantity < 0 || quantity > 99) return;
 
     _entries[_currentIndex] = _entries[_currentIndex].copyWith(
       quantity: quantity,
@@ -235,12 +238,19 @@ class InventoryModel extends ChangeNotifier {
     }
   }
 
+  /// 입력 모드 설정
+  void setInputMode(InputMode mode) {
+    _inputMode = mode;
+    notifyListeners();
+  }
+
   /// 데이터 초기화
   void clear() {
     _entries.clear();
     _currentIndex = 0;
     _summaryScrollPosition = 0.0; // 스크롤 위치도 초기화
     _selectedSummaryItems.clear(); // 선택 상태도 초기화
+    _inputMode = null; // 입력 모드도 초기화
     _clearError();
     notifyListeners();
   }

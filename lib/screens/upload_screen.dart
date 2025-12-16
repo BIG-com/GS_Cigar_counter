@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/inventory_model.dart';
-import 'entry_screen.dart';
+import 'mode_selection_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -313,7 +313,7 @@ class _UploadScreenState extends State<UploadScreen> {
             print('Excel 로드 성공: ${inventoryModel.entries.length}개 항목');
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
-                builder: (context) => const EntryScreen(),
+                builder: (context) => const ModeSelectionScreen(),
               ),
             );
           } else if (inventoryModel.errorMessage != null) {

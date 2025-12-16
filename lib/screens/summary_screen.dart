@@ -6,6 +6,7 @@ import '../services/share_service.dart';
 import 'upload_screen.dart';
 import 'entry_screen.dart';
 import 'statistics_screen.dart';
+import 'mode_selection_screen.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
@@ -72,9 +73,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const EntryScreen()),
-          ),
+          onPressed: () {
+            final inventoryModel = context.read<InventoryModel>();
+            final inputMode = inventoryModel.inputMode ?? InputMode.normal;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => EntryScreen(inputMode: inputMode),
+              ),
+            );
+          },
         ),
         actions: [
           IconButton(
@@ -314,9 +321,15 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const EntryScreen()),
-              ),
+              onPressed: () {
+                final inventoryModel = context.read<InventoryModel>();
+                final inputMode = inventoryModel.inputMode ?? InputMode.normal;
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(
+                    builder: (context) => EntryScreen(inputMode: inputMode),
+                  ),
+                );
+              },
               child: const Text('입력하러 가기'),
             ),
           ],
