@@ -8,6 +8,7 @@ import '../services/barcode_service.dart';
 import 'summary_screen.dart';
 import 'barcode_scanner_screen.dart';
 import 'mode_selection_screen.dart';
+import 'section_selection_screen.dart';
 
 class EntryScreen extends StatefulWidget {
   final InputMode inputMode;
@@ -62,7 +63,9 @@ class _EntryScreenState extends State<EntryScreen> {
       );
     }
 
-    if (inventoryModel.isFinished) {
+    // 일반 모드에서만 자동으로 요약 화면 이동
+    // 커스텀 모드는 _showSectionCompletedDialog에서 사용자가 선택
+    if (inventoryModel.isFinished && inventoryModel.progressMode != ProgressMode.custom) {
       // 모든 항목 완료 시 자동으로 요약 화면으로 이동
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _navigateToSummary();
@@ -82,6 +85,24 @@ class _EntryScreenState extends State<EntryScreen> {
     final currentEntry = inventoryModel.currentEntry;
     if (currentEntry == null) {
       return const Center(child: Text('현재 항목이 없습니다.'));
+    }
+
+    // 진열대 구분 항목 체크 및 다이얼로그 표시
+    if (currentEntry.isSectionDivider && _lastCheckedBarcode != currentEntry.barcode) {
+      _lastCheckedBarcode = currentEntry.barcode;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showSectionDividerDialog(context, inventoryModel);
+      });
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('진열대 정보를 확인하는 중...'),
+          ],
+        ),
+      );
     }
 
     // 바코드 11111111 체크 및 다이얼로그 표시
@@ -250,6 +271,15 @@ class _EntryScreenState extends State<EntryScreen> {
         inputMode: widget.inputMode,
         onQuantitySelected: (quantity) {
           inventoryModel.setQuantityForCurrent(quantity);
+
+          // 커스텀 모드에서 진열대 완료 여부 체크
+          if (inventoryModel.progressMode == ProgressMode.custom) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (inventoryModel.isCurrentSectionFinished()) {
+                _showSectionCompletedDialog(inventoryModel);
+              }
+            });
+          }
         },
         onBoruConfirmReady: (callback) {
           _boruConfirmCallback = callback;
@@ -736,6 +766,122 @@ class _EntryScreenState extends State<EntryScreen> {
     }
 
     return "1차"; // 기본값
+  }
+
+  // 진열대 구분 다이얼로그
+  void _showSectionDividerDialog(BuildContext context, InventoryModel inventoryModel) {
+    final currentEntry = inventoryModel.currentEntry;
+    final section = currentEntry?.displaySection ?? "1차";
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 백그라운드 터치로 닫기 방지
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.store, color: Theme.of(context).primaryColor, size: 28),
+            const SizedBox(width: 8),
+            const Text('진열대 안내'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$section 진열대 카운트를 시작합니다.',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '확인 버튼을 눌러 계속 진행해 주세요.',
+              style: TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              // 다음 항목으로 이동 (진열대 구분 항목은 건너뛰기)
+              if (!inventoryModel.isFinished) {
+                inventoryModel.setQuantityForCurrent(0); // 수량 0으로 설정하고 다음으로 이동
+                _lastCheckedBarcode = null; // 다음 체크를 위해 리셋
+              }
+            },
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 진열대 완료 다이얼로그
+  void _showSectionCompletedDialog(InventoryModel inventoryModel) {
+    final section = inventoryModel.selectedSection ?? "";
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // 백그라운드 터치로 닫기 방지
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            const SizedBox(width: 8),
+            const Text('완료'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '해당 진열대의 상품 카운트를 완료하였습니다.',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$section 진열대의 모든 상품 입력이 완료되었습니다.',
+              style: const TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              // 진열대를 완료 상태로 표시
+              inventoryModel.markSectionAsCompleted(section);
+
+              Navigator.of(context).pop(); // 다이얼로그 닫기
+
+              // 진열대 선택 화면으로 복귀
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => SectionSelectionScreen(inputMode: widget.inputMode),
+                ),
+              );
+            },
+            child: const Text('다음 진열대'),
+          ),
+          TextButton(
+            onPressed: () {
+              // 진열대를 완료 상태로 표시
+              inventoryModel.markSectionAsCompleted(section);
+
+              Navigator.of(context).pop(); // 다이얼로그 닫기
+
+              // 조사 결과 화면으로 이동
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => const SummaryScreen(),
+                ),
+              );
+            },
+            child: const Text('조사 결과 보기'),
+          ),
+        ],
+      ),
+    );
   }
 
   // 특수 바코드 11111111 다이얼로그

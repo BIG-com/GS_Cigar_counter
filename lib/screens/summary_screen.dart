@@ -7,6 +7,7 @@ import 'upload_screen.dart';
 import 'entry_screen.dart';
 import 'statistics_screen.dart';
 import 'mode_selection_screen.dart';
+import 'section_selection_screen.dart';
 
 class SummaryScreen extends StatefulWidget {
   const SummaryScreen({super.key});
@@ -76,11 +77,22 @@ class _SummaryScreenState extends State<SummaryScreen> {
           onPressed: () {
             final inventoryModel = context.read<InventoryModel>();
             final inputMode = inventoryModel.inputMode ?? InputMode.normal;
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) => EntryScreen(inputMode: inputMode),
-              ),
-            );
+
+            // 커스텀 모드: 진열대 선택 화면으로
+            if (inventoryModel.progressMode == ProgressMode.custom) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => SectionSelectionScreen(inputMode: inputMode),
+                ),
+              );
+            } else {
+              // 일반 모드: 입력 화면으로
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => EntryScreen(inputMode: inputMode),
+                ),
+              );
+            }
           },
         ),
         actions: [
@@ -143,14 +155,35 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 size: 20, // 아이콘 크기 줄임
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '입력된 상품 $recordedItems개',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+              // 커스텀 모드: 진열대 선택 버튼 / 일반 모드: 입력된 상품 개수 텍스트
+              if (inventoryModel.progressMode == ProgressMode.custom)
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => SectionSelectionScreen(
+                            inputMode: inventoryModel.inputMode ?? InputMode.normal,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.store, size: 18),
+                    label: const Text('진열대 선택'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: Text(
+                    '입력된 상품 $recordedItems개',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
                 ),
-              ),
               TextButton.icon(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => const StatisticsScreen()),

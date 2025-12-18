@@ -3,12 +3,16 @@ class ProductEntry {
   final String barcode;
   int? quantity;
   DateTime? recordedAt;
+  final String? displaySection; // 진열대 정보 (예: "1차", "2차")
+  final bool isSectionDivider; // 진열대 구분 항목인지 여부
 
   ProductEntry({
     required this.productName,
     required this.barcode,
     this.quantity,
     this.recordedAt,
+    this.displaySection,
+    this.isSectionDivider = false,
   });
 
   // JSON 변환을 위한 메서드
@@ -17,6 +21,8 @@ class ProductEntry {
         'barcode': barcode,
         'quantity': quantity,
         'recordedAt': recordedAt?.toIso8601String(),
+        'displaySection': displaySection,
+        'isSectionDivider': isSectionDivider,
       };
 
   // Firestore에서 데이터를 가져올 때 사용
@@ -28,6 +34,8 @@ class ProductEntry {
       recordedAt: map['recordedAt'] != null
           ? DateTime.parse(map['recordedAt'])
           : null,
+      displaySection: map['displaySection'],
+      isSectionDivider: map['isSectionDivider'] ?? false,
     );
   }
 
@@ -46,12 +54,16 @@ class ProductEntry {
     String? barcode,
     int? quantity,
     DateTime? recordedAt,
+    String? displaySection,
+    bool? isSectionDivider,
   }) {
     return ProductEntry(
       productName: productName ?? this.productName,
       barcode: barcode ?? this.barcode,
       quantity: quantity ?? this.quantity,
       recordedAt: recordedAt ?? this.recordedAt,
+      displaySection: displaySection ?? this.displaySection,
+      isSectionDivider: isSectionDivider ?? this.isSectionDivider,
     );
   }
 }

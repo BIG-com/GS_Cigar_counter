@@ -15,27 +15,81 @@ class InventoryModel extends ChangeNotifier {
   double _summaryScrollPosition = 0.0; // SummaryScreen ListView 스크롤 위치 저장
   final Set<int> _selectedSummaryItems = {}; // SummaryScreen에서 선택된 아이템들의 인덱스
   InputMode? _inputMode; // 선택된 입력 모드 저장
+  ProgressMode? _progressMode; // 선택된 진행 방식 저장
+  String? _selectedSection; // 커스텀 모드에서 선택된 진열대
+  final Set<String> _completedSections = {}; // 완료된 진열대 목록
 
   // Getters
   List<ProductEntry> get entries => List.unmodifiable(_entries);
+
+  // 커스텀 모드일 때는 선택된 진열대의 상품만 반환 (진열대 구분 항목 제외)
+  List<ProductEntry> get filteredEntries {
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      return _entries
+          .where((e) => e.displaySection == _selectedSection && !e.isSectionDivider)
+          .toList();
+    }
+    return List.unmodifiable(_entries);
+  }
+
   int get currentIndex => _currentIndex;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  bool get isFinished => _currentIndex >= _entries.length;
-  ProductEntry? get currentEntry =>
-      isFinished ? null : _entries[_currentIndex];
+
+  bool get isFinished {
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      return _currentIndex >= filteredEntries.length;
+    }
+    return _currentIndex >= _entries.length;
+  }
+
+  ProductEntry? get currentEntry {
+    if (isFinished) return null;
+
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      final filtered = filteredEntries;
+      return _currentIndex < filtered.length ? filtered[_currentIndex] : null;
+    }
+    return _entries[_currentIndex];
+  }
+
   InputMode? get inputMode => _inputMode;
+  ProgressMode? get progressMode => _progressMode;
+  String? get selectedSection => _selectedSection;
 
   // 완료된 항목들만 반환
-  List<ProductEntry> get recordedEntries =>
-      _entries.where((e) => e.quantity != null).toList();
+  List<ProductEntry> get recordedEntries {
+    final entries = _entries.where((e) => e.quantity != null).toList();
+
+    // 커스텀 모드: recordedAt 기준 오름차순 정렬 (완료 시간순)
+    if (_progressMode == ProgressMode.custom) {
+      entries.sort((a, b) {
+        if (a.recordedAt == null && b.recordedAt == null) return 0;
+        if (a.recordedAt == null) return 1;
+        if (b.recordedAt == null) return -1;
+        return a.recordedAt!.compareTo(b.recordedAt!);
+      });
+    }
+
+    return entries;
+  }
 
   // 진행률 계산
-  double get progress =>
-      _entries.isEmpty ? 0.0 : _currentIndex / _entries.length;
+  double get progress {
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      final filtered = filteredEntries;
+      return filtered.isEmpty ? 0.0 : _currentIndex / filtered.length;
+    }
+    return _entries.isEmpty ? 0.0 : _currentIndex / _entries.length;
+  }
 
   // 총 항목 수
-  int get totalItems => _entries.length;
+  int get totalItems {
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      return filteredEntries.length;
+    }
+    return _entries.length;
+  }
 
   // 기록된 항목 수
   int get recordedItems => recordedEntries.length;
@@ -120,21 +174,53 @@ class InventoryModel extends ChangeNotifier {
       }
 
       // 데이터 행 읽기 (헤더 제외)
+      String? currentDisplaySection; // 현재 진열대 상태 추적
+      final nameCol = productNameCol;
+      final codeCol = barcodeCol;
+
       for (int i = 1; i < sheet.rows.length; i++) {
         final row = sheet.rows[i];
-        if (row.length > math.max(productNameCol!, barcodeCol!)) {
-          final productNameCell = row[productNameCol];
-          final barcodeCell = row[barcodeCol];
+        if (row.length > math.max(nameCol, codeCol)) {
+          final productNameCell = row[nameCol];
+          final barcodeCell = row[codeCol];
 
           if (productNameCell?.value != null && barcodeCell?.value != null) {
             final productName = productNameCell!.value.toString().trim();
             final barcode = barcodeCell!.value.toString().trim();
 
             if (productName.isNotEmpty && barcode.isNotEmpty) {
-              _entries.add(ProductEntry(
-                productName: productName,
-                barcode: barcode,
-              ));
+              // 1단계: 보류/단종 구분 행 체크
+              final ignorePattern = RegExp(r'#+\s*(보류|단종)\s*#+');
+              if (ignorePattern.hasMatch(productName)) {
+                currentDisplaySection = null; // 이후 상품들 무시
+                continue; // 구분 행 자체도 추가 안 함
+              }
+
+              // 2단계: 진열대 구분 행 패턴 확인: ##### n차 #####
+              final sectionPattern = RegExp(r'#+\s*(\d+차)\s*#+');
+              final match = sectionPattern.firstMatch(productName);
+
+              if (match != null && match.group(1) != null) {
+                // 진열대 구분 행 발견
+                currentDisplaySection = match.group(1)!; // "1차", "2차" 등
+
+                // 진열대 구분 항목 추가
+                _entries.add(ProductEntry(
+                  productName: productName,
+                  barcode: barcode,
+                  isSectionDivider: true,
+                  displaySection: currentDisplaySection,
+                ));
+              } else {
+                // 3단계: 일반 상품 행 (currentDisplaySection이 null이 아닐 때만 추가)
+                if (currentDisplaySection != null) {
+                  _entries.add(ProductEntry(
+                    productName: productName,
+                    barcode: barcode,
+                    displaySection: currentDisplaySection,
+                  ));
+                }
+              }
             }
           }
         }
@@ -160,10 +246,29 @@ class InventoryModel extends ChangeNotifier {
   void setQuantityForCurrent(int quantity) {
     if (isFinished || quantity < 0 || quantity > 99) return;
 
-    _entries[_currentIndex] = _entries[_currentIndex].copyWith(
-      quantity: quantity,
-      recordedAt: DateTime.now(),
-    );
+    if (_progressMode == ProgressMode.custom && _selectedSection != null) {
+      // 커스텀 모드: 필터링된 리스트에서 현재 항목을 찾아서 실제 _entries에서 수정
+      final filtered = filteredEntries;
+      if (_currentIndex >= filtered.length) return;
+
+      final currentItem = filtered[_currentIndex];
+      final actualIndex = _entries.indexWhere(
+        (e) => e.productName == currentItem.productName && e.barcode == currentItem.barcode,
+      );
+
+      if (actualIndex != -1) {
+        _entries[actualIndex] = _entries[actualIndex].copyWith(
+          quantity: quantity,
+          recordedAt: DateTime.now(),
+        );
+      }
+    } else {
+      // 일반 모드
+      _entries[_currentIndex] = _entries[_currentIndex].copyWith(
+        quantity: quantity,
+        recordedAt: DateTime.now(),
+      );
+    }
 
     _currentIndex++;
     notifyListeners();
@@ -244,6 +349,86 @@ class InventoryModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 진행 방식 설정
+  void setProgressMode(ProgressMode mode) {
+    _progressMode = mode;
+    notifyListeners();
+  }
+
+  /// 진열대 선택
+  void selectSection(String section) {
+    _selectedSection = section;
+    _currentIndex = 0; // 인덱스 초기화
+    notifyListeners();
+  }
+
+  /// 진열대 목록 가져오기 (진열대 구분 항목 제외)
+  List<String> getSections() {
+    final sections = <String>{};
+    for (final entry in _entries) {
+      if (entry.displaySection != null && !entry.isSectionDivider) {
+        sections.add(entry.displaySection!);
+      }
+    }
+
+    final sectionList = sections.toList();
+
+    // "n차" 형식에서 숫자를 추출하여 숫자 기준으로 정렬
+    sectionList.sort((a, b) {
+      final numA = int.tryParse(a.replaceAll('차', ''));
+      final numB = int.tryParse(b.replaceAll('차', ''));
+
+      if (numA != null && numB != null) {
+        return numA.compareTo(numB); // 숫자 비교
+      }
+
+      // 숫자 추출 실패 시 문자열 정렬
+      return a.compareTo(b);
+    });
+
+    return sectionList;
+  }
+
+  /// 특정 진열대의 상품 목록 가져오기 (진열대 구분 항목 제외)
+  List<ProductEntry> getEntriesBySection(String section) {
+    return _entries
+        .where((e) => e.displaySection == section && !e.isSectionDivider)
+        .toList();
+  }
+
+  /// 특정 진열대의 첫 번째 상품 가져오기
+  ProductEntry? getFirstProductBySection(String section) {
+    final sectionEntries = _entries
+        .where((e) => e.displaySection == section && !e.isSectionDivider)
+        .toList();
+
+    return sectionEntries.isNotEmpty ? sectionEntries.first : null;
+  }
+
+  /// 특정 진열대가 완료되었는지 확인
+  bool isSectionCompleted(String section) {
+    return _completedSections.contains(section);
+  }
+
+  /// 진열대 완료 표시
+  void markSectionAsCompleted(String section) {
+    _completedSections.add(section);
+    notifyListeners();
+  }
+
+  /// 현재 진열대의 모든 상품이 입력 완료되었는지 확인
+  bool isCurrentSectionFinished() {
+    if (_selectedSection == null || _progressMode != ProgressMode.custom) {
+      return false;
+    }
+
+    final sectionEntries = getEntriesBySection(_selectedSection!);
+    if (sectionEntries.isEmpty) return false;
+
+    // 진열대의 모든 상품이 수량 입력되었는지 확인
+    return sectionEntries.every((entry) => entry.quantity != null);
+  }
+
   /// 데이터 초기화
   void clear() {
     _entries.clear();
@@ -251,6 +436,9 @@ class InventoryModel extends ChangeNotifier {
     _summaryScrollPosition = 0.0; // 스크롤 위치도 초기화
     _selectedSummaryItems.clear(); // 선택 상태도 초기화
     _inputMode = null; // 입력 모드도 초기화
+    _progressMode = null; // 진행 방식도 초기화
+    _selectedSection = null; // 선택된 진열대도 초기화
+    _completedSections.clear(); // 완료된 진열대 목록도 초기화
     _clearError();
     notifyListeners();
   }

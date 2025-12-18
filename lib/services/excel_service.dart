@@ -60,8 +60,8 @@ class ExcelService {
           final barcodeCell = row[barcodeCol];
 
           if (productNameCell?.value != null && barcodeCell?.value != null) {
-            final productName = productNameCell.value.toString().trim();
-            final barcode = barcodeCell.value.toString().trim();
+            final productName = productNameCell!.value.toString().trim();
+            final barcode = barcodeCell!.value.toString().trim();
 
             if (productName.isNotEmpty && barcode.isNotEmpty) {
               products.add(ProductEntry(
